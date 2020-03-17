@@ -15,8 +15,17 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from cwk1Application import views
 
 urlpatterns = [
-    path('cwk1Application/', include('cwk1Application.urls')),
-    path('admin/', admin.site.urls)
+    #path('/', include('cwk1Application.urls')),
+    path('admin/', admin.site.urls),
+    #path('/', views.home, name='home'),
+    path('register', views.register, name='register'),
+    path('login', views.loginUser, name='loginUser'),
+    path('list', views.listModInstances, name='listModInstances'),
+    path('view', views.viewAllRatings, name='viewAllRatings'),
+    path('average/', views.averageRating, name='averageRating'),
+    path('rate', views.rateProfessor, name='rateProfessor')
+
 ]

@@ -1,16 +1,15 @@
-from django.shortcuts import render
 from django.http import HttpResponse
-from rest_framework import generics
 from .models import Module, Professor, ModuleInstance, Rating
 import json
-from decimal import *
+from decimal import Decimal, ROUND_HALF_UP
 from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, get_list_or_404
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
-from django.contrib.auth import login, authenticate, logout
+from django.contrib.auth import login, authenticate
 from rest_framework.response import Response
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 # File for the API views for the client to interact with
 
@@ -18,21 +17,23 @@ from rest_framework.decorators import api_view
 # View for registering a user.
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes((AllowAny,))
 def register(request):
     regData = json.loads(request.body)
-    if regData['username'] is "" or regData['email'] is "" or regData['password'] is "":
+    if regData['username'] == "" or regData['email'] == "" or regData['password'] == "":
         return Response(status = 400, data = "Entered details are not valid.")
     else:
         regUsername = regData['username']
         regEmail = regData['email']
         regPwd = regData['password']
-        user = User.objects.create_user(regUsername, regEmail, regPwd)
-        return Response(status = 200)
+        User.objects.create_user(regUsername, regEmail, regPwd)
+        return Response(status = 201)
 
 ################################################################################
 # View for logging a user in.
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes((AllowAny,))
 def loginUser(request):
     loginData = json.loads(request.body)
     loginUsername = loginData['username']
@@ -53,11 +54,14 @@ def loginUser(request):
 ################################################################################
 # View for listing all the modules and the professors who teach them.
 @api_view(['GET'])
+@permission_classes((AllowAny,))
 def listModInstances(request):
     iteration = 1
     bigDict = {}
     # Get all the module instance objects, ordered appropriately
     lOrdered = ModuleInstance.objects.all().order_by('module_id__module_code', 'year', 'semester')
+    if not lOrdered:
+        return Response("No ModuleInstance objects found", status = 404)
 
     # Loop through the objects so that they can be added to the output.
     for x in lOrdered:
@@ -66,8 +70,9 @@ def listModInstances(request):
         "semester": x.semester}
 
         teachers = x.taught_by.all()
+        if not teachers:
+            return Response("No teachers found for module " + x.module_id.module_code)
         teacherList = []
-        numTeachers = x.taught_by.all().count()
 
         for teacher in teachers:
             teacherList.append(teacher.prof_code + ' ' + teacher.prof_name)
@@ -83,11 +88,15 @@ def listModInstances(request):
 ################################################################################
 # View for getting every professor's average rating.
 @api_view(['GET'])
+@permission_classes((AllowAny,))
 def viewAllRatings(request):
     myDict = {}
     numOccurrences = {}
     # get all the Rating objects, then loop through them
     vOrdered = Rating.objects.all().order_by('professor__prof_name')
+    if not vOrdered:
+        return Response("No Rating objects found.", status = 404)
+
     for y in vOrdered:
 
         profName = y.professor.prof_name
@@ -114,6 +123,7 @@ def viewAllRatings(request):
 ################################################################################
 # View for getting a professor's average rating in a specific module
 @api_view(['GET'])
+@permission_classes((AllowAny,))
 def averageRating(request):
     # get the professor and module code from the client
     profCode =  request.GET.get('p' '')
@@ -122,14 +132,12 @@ def averageRating(request):
     # get the relevant objects
     prof = get_object_or_404(Professor, prof_code = profCode)
     module = get_object_or_404(Module, module_code = moduleCode)
-    ratings = Rating.objects.filter(professor__prof_code = profCode,
-                            module_instance__module_id__module_code = moduleCode)
-
+    ratings = get_list_or_404(Rating, professor__prof_code = profCode,
+                                module_instance__module_id__module_code = moduleCode)
     # loop through the ratings to sum and then average them
     total = 0
     for rating in ratings:
         total = total + rating.rating
-    average = total / len(ratings)
     aveRating = int(Decimal(total/len(ratings)).quantize(Decimal('1.'), rounding = ROUND_HALF_UP))
 
     data = {'prof_name' : prof.prof_name, "module_name": module.module_name, "rating": aveRating}
@@ -141,6 +149,7 @@ def averageRating(request):
 # View for rating a professor specified by the client
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes((IsAuthenticated,))
 def rateProfessor(request):
     reqData = json.loads(request.body)
     if reqData['rating'] not in ['1', '2', '3', '4', '5']:
@@ -157,6 +166,6 @@ def rateProfessor(request):
     Rating.objects.create(rating = reqData['rating'], professor = professor,
                             module_instance = module_instance)
 
-    return Response(status = 200)
+    return Response(status = 201)
 
 ################################################################################
